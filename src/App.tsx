@@ -28,7 +28,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, auth, signIn, logOut } from './firebase';
+import { db, auth, signIn, signInRedirect, checkRedirectResult, logOut } from './firebase';
 import { cn } from './lib/utils';
 
 // --- Types ---
@@ -153,6 +153,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const isAdmin = user?.email?.toLowerCase() === 'kalam438@gmail.com';
 
@@ -164,6 +166,16 @@ export default function App() {
       setIsAuthReady(true);
     });
     return () => unsubscribe();
+  }, []);
+
+  // Check for redirect result
+  useEffect(() => {
+    checkRedirectResult().catch((error: any) => {
+      console.error('Redirect result error:', error);
+      if (error.code !== 'auth/popup-closed-by-user') {
+        setAuthError(error.message);
+      }
+    });
   }, []);
 
   // Connection Test
@@ -283,13 +295,73 @@ export default function App() {
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Inventory Pro</h1>
           <p className="text-slate-500 mb-8">Secure, real-time product tracking for your business.</p>
-          <button 
-            onClick={signIn}
-            className="w-full flex items-center justify-center gap-3 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-          >
-            <LogIn size={20} />
-            Sign in with Google
-          </button>
+          
+          {authError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex flex-col gap-2 text-red-600 text-sm">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                <p>{authError}</p>
+              </div>
+              {authError.includes('auth/unauthorized-domain') && (
+                <p className="mt-2 text-xs text-red-500 font-medium">
+                  Tip: If you are running this on a new domain (like Netlify), you must add it to the "Authorized domains" list in your Firebase Console.
+                </p>
+              )}
+              {authError.includes('auth/popup-closed-by-user') && (
+                <p className="mt-2 text-xs text-red-500 font-medium">
+                  Tip: The sign-in window was closed. If popups are blocked, try the "Sign in with Redirect" option below.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <button 
+              disabled={isSigningIn}
+              onClick={async () => {
+                try {
+                  setIsSigningIn(true);
+                  setAuthError(null);
+                  await signIn();
+                } catch (error: any) {
+                  console.error('Sign in error:', error);
+                  if (error.code === 'auth/popup-closed-by-user') {
+                    setAuthError('Sign-in window was closed. Please try again or use the redirect option.');
+                  } else {
+                    setAuthError(error.message || 'Failed to sign in. Please check your connection.');
+                  }
+                } finally {
+                  setIsSigningIn(false);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-3 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSigningIn ? <Loader2 className="animate-spin" size={20} /> : <LogIn size={20} />}
+              Sign in with Google
+            </button>
+
+            <button 
+              disabled={isSigningIn}
+              onClick={async () => {
+                try {
+                  setIsSigningIn(true);
+                  setAuthError(null);
+                  await signInRedirect();
+                } catch (error: any) {
+                  console.error('Redirect error:', error);
+                  setAuthError(error.message || 'Failed to start redirect sign-in.');
+                  setIsSigningIn(false);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-3 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Use Redirect Fallback
+            </button>
+          </div>
+          
+          <p className="mt-6 text-center text-xs text-slate-400">
+            Having trouble? The redirect option is more reliable on mobile devices.
+          </p>
         </motion.div>
       </div>
     );
