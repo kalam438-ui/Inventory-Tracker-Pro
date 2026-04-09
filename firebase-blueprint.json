@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An item in the inventory",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the product" },
+        "sku": { "type": "string", "description": "Stock Keeping Unit" },
+        "inStock": { "type": "number", "description": "Total items received" },
+        "outStock": { "type": "number", "description": "Total items sold/removed" },
+        "quantity": { "type": "number", "description": "Current stock (inStock - outStock)" },
+        "price": { "type": "number", "description": "Unit price" },
+        "category": { "type": "string", "description": "Product category" },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Last update timestamp" },
+        "updatedBy": { "type": "string", "description": "UID of the user who last updated the product" }
+      },
+      "required": ["name", "sku", "quantity", "price", "category", "lastUpdated", "updatedBy"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user profile",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "viewer"] }
+      },
+      "required": ["displayName", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Inventory products"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    }
+  }
+}

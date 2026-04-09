@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: products
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - sku: string (required, 1-50 chars)
+    //   - inStock: number (required, >= 0)
+    //   - outStock: number (required, >= 0)
+    //   - quantity: number (required, quantity == inStock - outStock)
+    //   - price: number (required, >= 0)
+    //   - category: string (required, 1-50 chars)
+    //   - lastUpdated: timestamp (required)
+    //   - updatedBy: string (required, UID)
+    //
+    // Collection: users
+    // Document ID: userId
+    // Fields:
+    //   - displayName: string (required)
+    //   - email: string (required)
+    //   - photoURL: string (optional)
+    //   - role: string (required, ['admin', 'viewer'])
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email.lower() == "kalam438@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.sku is string && data.sku.size() >= 1 && data.sku.size() <= 50 &&
+             data.inStock is number && data.inStock >= 0 &&
+             data.outStock is number && data.outStock >= 0 &&
+             data.quantity is number && data.quantity == data.inStock - data.outStock &&
+             data.price is number && data.price >= 0 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.lastUpdated is timestamp &&
+             data.updatedBy == request.auth.uid;
+    }
+
+    function isValidUser(data) {
+      return data.displayName is string &&
+             data.email is string &&
+             data.role in ['admin', 'viewer'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == 'viewer';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidProduct(request.resource.data);
+      allow update: if isAdmin() && isValidProduct(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
