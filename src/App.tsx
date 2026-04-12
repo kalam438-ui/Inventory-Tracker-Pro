@@ -163,7 +163,7 @@ export default function App() {
     }
   }, []);
 
-  const isAdmin = user?.email?.toLowerCase() === 'kalam438@gmail.com' && viewMode !== 'public';
+  const isAdmin = viewMode !== 'public';
 
   // Auth Listener
   useEffect(() => {
@@ -191,12 +191,6 @@ export default function App() {
 
   // Real-time Products Listener
   useEffect(() => {
-    if (!isAuthReady || !user) {
-      setProducts([]);
-      setLoading(false);
-      return;
-    }
-
     const q = query(collection(db, 'products'), orderBy('lastUpdated', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const productData = snapshot.docs.map(doc => ({
@@ -210,7 +204,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, user]);
+  }, []);
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -232,7 +226,6 @@ export default function App() {
 
   const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user) return;
 
     const formData = new FormData(e.currentTarget);
     const inStock = Number(formData.get('inStock'));
@@ -246,7 +239,7 @@ export default function App() {
       price: Number(formData.get('price')),
       category: formData.get('category') as string,
       lastUpdated: serverTimestamp(),
-      updatedBy: user.uid
+      updatedBy: user?.uid || 'anonymous'
     };
 
     try {
@@ -279,31 +272,6 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-slate-100"
-        >
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Package size={32} />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Inventory Pro</h1>
-          <p className="text-slate-500 mb-8">Secure, real-time product tracking for your business.</p>
-          <button 
-            onClick={signIn}
-            className="w-full flex items-center justify-center gap-3 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
-          >
-            <LogIn size={20} />
-            Sign in with Google
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -318,22 +286,34 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-100 rounded-full">
-                <img 
-                  src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
-                  alt="Avatar" 
-                  className="w-6 h-6 rounded-full"
-                  referrerPolicy="no-referrer"
-                />
-                <span className="text-sm font-medium text-slate-700 hidden md:block">{user.displayName}</span>
-              </div>
-              <button 
-                onClick={logOut}
-                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                title="Sign Out"
-              >
-                <LogOut size={20} />
-              </button>
+              {user && (
+                <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-100 rounded-full">
+                  <img 
+                    src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
+                    alt="Avatar" 
+                    className="w-6 h-6 rounded-full"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="text-sm font-medium text-slate-700 hidden md:block">{user.displayName}</span>
+                </div>
+              )}
+              {user ? (
+                <button 
+                  onClick={logOut}
+                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut size={20} />
+                </button>
+              ) : (
+                <button 
+                  onClick={signIn}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  <LogIn size={18} />
+                  Sign In
+                </button>
+              )}
             </div>
           </div>
         </header>
