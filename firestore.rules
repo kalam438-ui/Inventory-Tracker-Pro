@@ -53,7 +53,8 @@ service cloud.firestore {
              data.quantity is number && data.quantity == data.inStock - data.outStock &&
              data.price is number && data.price >= 0 &&
              data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
-             data.lastUpdated is timestamp;
+             data.lastUpdated is timestamp &&
+             data.updatedBy == request.auth.uid;
     }
 
     function isValidUser(data) {
@@ -73,10 +74,10 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow read: if true;
-      allow create: if isValidProduct(request.resource.data);
-      allow update: if isValidProduct(request.resource.data);
-      allow delete: if true;
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidProduct(request.resource.data);
+      allow update: if isAdmin() && isValidProduct(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }
