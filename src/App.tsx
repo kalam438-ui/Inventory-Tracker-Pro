@@ -294,10 +294,26 @@ export default function App() {
           <p className="text-slate-500 mb-8">Secure, real-time product tracking for your business.</p>
           <button 
             onClick={signIn}
-            className="w-full flex items-center justify-center gap-3 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+            className="w-full flex items-center justify-center gap-3 py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm mb-4"
           >
-            <LogIn size={20} />
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
             Sign in with Google
+          </button>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-slate-500">Or view only</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => window.location.href = '?view=public'}
+            className="w-full py-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            Continue as Guest
           </button>
         </motion.div>
       </div>
