@@ -9,7 +9,8 @@ import {
   serverTimestamp, 
   query, 
   orderBy,
-  getDocFromServer
+  limit,
+  getDocs
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
@@ -25,7 +26,8 @@ import {
   TrendingUp,
   TrendingDown,
   Layers,
-  X
+  X,
+  RefreshCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, signIn, logOut } from './firebase';
@@ -108,10 +110,15 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       try {
-        const parsed = JSON.parse(event.error.message);
+        const message = event.error?.message || event.message;
+        const parsed = JSON.parse(message);
         if (parsed.error) {
           setHasError(true);
-          setErrorMessage(`Database Error: ${parsed.error}`);
+          if (parsed.error.includes('Quota exceeded')) {
+            setErrorMessage('Daily limit reached. The database free tier has reached its daily limit for reads. It will reset automatically tomorrow.');
+          } else {
+            setErrorMessage(`Database Error: ${parsed.error}`);
+          }
         }
       } catch {
         // Not a JSON error we're looking for
@@ -128,14 +135,14 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
         <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full border border-red-100">
           <div className="flex items-center gap-3 text-red-600 mb-4">
             <AlertCircle size={24} />
-            <h2 className="text-xl font-bold">Something went wrong</h2>
+            <h2 className="text-xl font-bold text-slate-900">Something went wrong</h2>
           </div>
-          <p className="text-gray-600 mb-6">{errorMessage}</p>
+          <p className="text-slate-600 mb-6">{errorMessage || 'An unexpected error occurred.'}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="w-full py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+            className="w-full py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-colors"
           >
-            Reload Application
+            Try Refreshing
           </button>
         </div>
       </div>
@@ -168,37 +175,53 @@ export default function App() {
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      console.log('Current User Email:', u?.email);
       setUser(u);
       setIsAuthReady(true);
     });
-    return () => unsubscribe();
-  }, []);
 
-  // Connection Test
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. ");
-        }
-      }
-    }
-    testConnection();
-  }, []);
+    // Safety timeout: if auth doesn't respond in 5 seconds, proceed anyway
+    const timeout = setTimeout(() => {
+      setIsAuthReady(true);
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, []); // Removed isAuthReady from dependencies to fix infinite loop
 
   // Real-time Products Listener
   useEffect(() => {
-    if (!isAuthReady || (!user && viewMode !== 'public')) {
-      setProducts([]);
-      setLoading(false);
+    // If we are in public view, we don't wait for auth to be "ready" 
+    // because Firestore rules allow public read.
+    if (!isAuthReady && viewMode !== 'public') return;
+
+    // Limit to 500 products to save read quota (Free Way)
+    const q = query(
+      collection(db, 'products'), 
+      orderBy('lastUpdated', 'desc'),
+      limit(500)
+    );
+
+    // OPTIMIZATION: Guests get a one-time fetch to save quota
+    // Admins get real-time updates
+    if (!user && viewMode === 'public') {
+      getDocs(q).then(snapshot => {
+        const productData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Product[];
+        setProducts(productData);
+        setLoading(false);
+      }).catch(error => {
+        if (!error.message.includes('Quota limit exceeded')) {
+          handleFirestoreError(error, OperationType.GET, 'products');
+        }
+      });
       return;
     }
 
-    const q = query(collection(db, 'products'), orderBy('lastUpdated', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: false }, (snapshot) => {
       const productData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -206,11 +229,15 @@ export default function App() {
       setProducts(productData);
       setLoading(false);
     }, (error) => {
+      // If it's a permission error and we are not logged in, we might still be loading
+      if (error.message.includes('permission-denied') && !user && viewMode !== 'public') {
+        return;
+      }
       handleFirestoreError(error, OperationType.GET, 'products');
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, user]);
+  }, [isAuthReady, user, viewMode]);
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -246,7 +273,7 @@ export default function App() {
       price: Number(formData.get('price')),
       category: formData.get('category') as string,
       lastUpdated: serverTimestamp(),
-      updatedBy: user.uid
+      updatedBy: user?.uid || 'anonymous'
     };
 
     try {
@@ -334,6 +361,15 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-4">
+              {!user && viewMode === 'public' && (
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Refresh Data"
+                >
+                  <RefreshCcw size={20} />
+                </button>
+              )}
               {user ? (
                 <>
                   <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-100 rounded-full">
